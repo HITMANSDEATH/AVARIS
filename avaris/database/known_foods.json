@@ -1,0 +1,42 @@
+{
+ "fried chicken burger": [
+  "Burger bun",
+  "Fried breaded chicken patty",
+  "Lettuce",
+  "Cheese slice",
+  "White onion slices",
+  "Pickle slices",
+  "Spicy orange sauce",
+  "Chili flakes",
+  "Chicken meat",
+  "Flour",
+  "Breadcrumbs",
+  "Eggs",
+  "Cooking oil",
+  "Salt",
+  "Sugar",
+  "Spices (e.g., garlic powder, onion powder, paprika, black pepper)",
+  "Mayonnaise",
+  "Vinegar"
+ ],
+ "crispy chicken burger": [
+  "Burger bun",
+  "Crispy fried chicken patty",
+  "Cheese slice",
+  "Lettuce",
+  "White onion slices",
+  "Dill pickle slices",
+  "Spicy orange sauce",
+  "Chili flakes (visible in sauce)",
+  "Chicken meat (as the core of the patty)",
+  "Breading (flour, breadcrumbs, spices, eggs for the patty)",
+  "Cooking oil (for frying the patty)",
+  "Mayonnaise (likely base for the sauce)",
+  "Sugar (in bun, sauce, pickles)",
+  "Salt (general seasoning, in bun, patty, sauce, pickles)",
+  "Vinegar (in pickles, sauce)",
+  "Yeast (for bun)",
+  "Garlic powder (possible seasoning in patty or sauce)",
+  "Onion powder (possible seasoning in patty or sauce)"
+ ]
+}

@@ -1,0 +1,6 @@
+{
+ "peanut": ["peanut", "peanut butter", "groundnut"],
+ "gluten": ["wheat", "bread", "flour", "pasta"],
+ "dairy": ["milk", "cheese", "butter", "yogurt"],
+ "soy": ["soy", "soy sauce", "soybean"]
+}

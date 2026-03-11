@@ -1,0 +1,201 @@
+:root {
+  --primary: #00ffcc;
+  --bg-color: #0d1117;
+  --card-bg: #161b22;
+  --text-main: #c9d1d9;
+  --text-muted: #8b949e;
+  --border-color: #30363d;
+  
+  --danger: #ff4444;
+  --warning: #ffaa00;
+  --success: #00cc66;
+
+  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  
+  font-family: var(--font-family);
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-image: 
+    radial-gradient(circle at 15% 50%, rgba(0, 255, 204, 0.05), transparent 25%),
+    radial-gradient(circle at 85% 30%, rgba(0, 204, 102, 0.05), transparent 25%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+* {
+  box-sizing: inherit;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0 0 1rem 0;
+  font-weight: 600;
+  color: #fff;
+}
+
+p {
+  margin: 0 0 1rem 0;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-color);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4b535d;
+}
+
+/* Food Analysis Panel Styles */
+.food-analysis-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 2rem;
+  border: 1px solid var(--border-color);
+  animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.food-upload-section {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.upload-label {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-muted);
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.upload-label:hover {
+  border-color: var(--primary);
+  background: rgba(0, 255, 204, 0.05);
+  color: var(--primary);
+}
+
+.btn-primary {
+  padding: 0.75rem 1.5rem;
+  background: var(--primary);
+  color: var(--bg-color);
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 255, 204, 0.3);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.food-result-container {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.food-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.food-result-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+@media (max-width: 768px) {
+  .food-result-content {
+    grid-template-columns: 1fr;
+  }
+}
+
+.food-image-preview img {
+  width: 100%;
+  max-height: 400px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.ingredient-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.ingredient-list li {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.3rem 0.8rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  border: 1px solid var(--border-color);
+}
+
+.allergen-tags {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.allergen-tag {
+  background: rgba(255, 68, 68, 0.1);
+  color: var(--danger);
+  padding: 0.3rem 0.8rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: 1px solid var(--danger);
+  text-transform: uppercase;
+}
+
+.ai-explanation-box {
+  background: rgba(255, 255, 255, 0.03);
+  padding: 1.5rem;
+  border-radius: 12px;
+  border-left: 4px solid var(--primary);
+}
+
+.ai-explanation-box p {
+  margin-top: 0.5rem;
+  margin-bottom: 0;
+  line-height: 1.6;
+  color: var(--text-main);
+}

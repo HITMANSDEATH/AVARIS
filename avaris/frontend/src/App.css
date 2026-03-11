@@ -1,0 +1,172 @@
+.app-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.header h1 {
+  font-size: 2.5rem;
+  margin: 0;
+  background: -webkit-linear-gradient(45deg, var(--primary), #00aaff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.header p {
+  color: var(--text-muted);
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 1.5rem;
+}
+
+/* Base Card Style */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.08);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+.card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0,255,204,0.05), 0 6px 6px rgba(0,0,0,0.1);
+  border-color: rgba(0,255,204,0.2);
+}
+
+.card-title {
+  font-size: 1.2rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Specific Placements */
+.sensors-container {
+  grid-column: span 8;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+.risk-container {
+  grid-column: span 4;
+}
+
+.forecast-container {
+  grid-column: span 8;
+}
+
+.anomaly-container {
+  grid-column: span 4;
+}
+
+/* Sensor specific */
+.sensor-value {
+  font-size: 3rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 1rem 0;
+}
+.sensor-unit {
+  font-size: 1.2rem;
+  color: var(--primary);
+}
+
+/* Animations */
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.pulse-icon {
+  animation: pulse 2s infinite ease-in-out;
+}
+
+/* Risk specific */
+.risk-level-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+}
+
+.risk-badge {
+  font-size: 2.5rem;
+  font-weight: bold;
+  padding: 1rem 3rem;
+  border-radius: 50px;
+  margin: 1rem 0;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.risk-Low {
+  background: rgba(0, 204, 102, 0.1);
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+.risk-Medium {
+  background: rgba(255, 170, 0, 0.1);
+  color: var(--warning);
+  border: 1px solid var(--warning);
+}
+.risk-High {
+  background: rgba(255, 68, 68, 0.1);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  animation: pulse 1.5s infinite;
+}
+
+/* Anomaly List */
+.anomaly-item {
+  padding: 1rem;
+  background: rgba(255,255,255,0.02);
+  border-left: 4px solid var(--danger);
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+.anomaly-item:last-child {
+  margin-bottom: 0;
+}
+
+/* Forecast Table */
+.forecast-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.forecast-table th, .forecast-table td {
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+.forecast-table th {
+  color: var(--text-muted);
+  font-weight: normal;
+}

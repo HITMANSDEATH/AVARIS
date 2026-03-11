@@ -5,7 +5,7 @@ from backend.config.settings import settings
 
 # Configure Gemini
 # Using the key you provided directly to ensure it takes effect
-api_key = "AIzaSyA3JtzZiv-4FwDP8tsVkKGIHqoKvsGPjvU" 
+api_key = "" 
 
 print("*" * 50)
 if api_key and api_key not in ["", "YOUR_API_KEY_HERE"]:

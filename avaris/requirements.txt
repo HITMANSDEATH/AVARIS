@@ -6,7 +6,6 @@ scikit-learn
 tensorflow
 sqlalchemy
 opencv-python
-torch
-transformers
+pillow
 google-generativeai
 python-dotenv

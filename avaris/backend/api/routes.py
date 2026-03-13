@@ -9,10 +9,13 @@ import os
 from backend.database.models import get_db, SensorData, RiskPrediction, AnomalyEvent, FoodAnalysisLog
 from backend.ai_engine.reasoning import explain_anomaly, explain_risk, explain_food_risk
 from backend.vision.ingredient_detector import detect_ingredients
-from backend.allergen.allergen_matcher import match_allergens, evaluate_risk, save_to_known_foods, get_ingredients_from_cache
+from ml.allergen_checker import check_ingredients_for_allergens
 from fastapi import File, UploadFile
 import json
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -176,7 +179,7 @@ def get_forecast(db: Session = Depends(get_db)):
 
 @router.post("/upload-food-image")
 async def upload_food_image(image: UploadFile = File(...), db: Session = Depends(get_db)):
-    """Upload food image, analyze for allergens, and store result."""
+    """Upload food image, analyze for allergens using local Vision Transformer, and store result."""
     try:
         # 1. Save Image
         timestamp = time.strftime("%Y%m%d_%H%M%S")
@@ -188,23 +191,25 @@ async def upload_food_image(image: UploadFile = File(...), db: Session = Depends
         with open(file_path, "wb") as buffer:
             buffer.write(await image.read())
             
-        # 2. Analyze Image
-        # First, try to see if it's a known food (though Gemini is better for visual)
-        # For now, always use Gemini for best accuracy as requested.
+        logger.info(f"Saved uploaded image to {file_path}")
+            
+        # 2. Analyze Image using Local Vision Transformer
         analysis = detect_ingredients(file_path)
         
         if "error" in analysis:
+            logger.error(f"Image analysis failed: {analysis['error']}")
             raise HTTPException(status_code=500, detail=analysis["error"])
             
         food_item = analysis.get("food_item", "Unknown")
         ingredients = analysis.get("ingredients", [])
+        confidence = analysis.get("confidence", 0.0)
         
-        # 3. Match Allergens
-        allergen_db_path = "database/allergen_db.json"
-        known_foods_path = "database/known_foods.json"
+        logger.info(f"Analysis complete - Food: {food_item}, Ingredients: {ingredients}")
         
-        detected_allergens = match_allergens(ingredients, allergen_db_path)
-        risk_level = evaluate_risk(detected_allergens)
+        # 3. Check for Allergens using new allergen checker
+        detected_allergens, risk_level = check_ingredients_for_allergens(ingredients)
+        
+        logger.info(f"Allergen check complete - Allergens: {detected_allergens}, Risk: {risk_level}")
         
         # 4. Generate AI Explanation
         ai_explanation = explain_food_risk(food_item, ingredients, detected_allergens, risk_level)
@@ -222,19 +227,19 @@ async def upload_food_image(image: UploadFile = File(...), db: Session = Depends
         db.commit()
         db.refresh(db_log)
         
-        # 6. Save to Known Foods for future reference
-        save_to_known_foods(food_item, ingredients, known_foods_path)
+        logger.info(f"Analysis logged to database with ID: {db_log.id}")
         
         return {
             "food_item": food_item,
             "ingredients": ingredients,
             "detected_allergens": detected_allergens,
             "risk_level": risk_level,
+            "confidence": confidence,
             "ai_explanation": ai_explanation,
             "image_url": f"/uploads/food_images/{filename}"
         }
     except Exception as e:
-        print(f"Error in upload_food_image: {e}")
+        logger.error(f"Error in upload_food_image: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/latest-food-analysis")

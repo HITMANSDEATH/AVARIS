@@ -3,6 +3,24 @@ import './App.css';
 
 const API_BASE = 'http://localhost:8000/api';
 
+// Convert markdown formatting to HTML
+function formatMarkdown(text) {
+  if (!text) return '';
+  
+  return text
+    // Bold: **text** -> <strong>text</strong>
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Italic: *text* -> <em>text</em> (but not bullet points)
+    .replace(/(?<!\*)\*(?!\*)(.+?)\*(?!\*)/g, '<em>$1</em>')
+    // Line breaks
+    .replace(/\n/g, '<br>')
+    // Bullet points: * item -> <li>item</li>
+    .replace(/^[\*\-] (.+)$/gm, '<li>$1</li>')
+    // Wrap consecutive list items in <ul>
+    .replace(/(<li>.*?<\/li>)(<br>)?(?=<li>|$)/gs, '$1')
+    .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+}
+
 function App() {
   const [sensorData, setSensorData] = useState({ temperature: 0, humidity: 0, dust: 0 });
   const [riskData, setRiskData] = useState({ risk_level: 'UNKNOWN', confidence: 0 });
@@ -287,7 +305,12 @@ function FoodAnalysisPanel({ API_BASE }) {
 
               <div className="ai-explanation-box" style={{ marginTop: '1.5rem' }}>
                 <strong>AI Safety Guidance:</strong>
-                <p>{result.ai_explanation}</p>
+                <div 
+                  style={{ whiteSpace: 'pre-wrap' }}
+                  dangerouslySetInnerHTML={{ 
+                    __html: formatMarkdown(result.ai_explanation) 
+                  }}
+                />
               </div>
             </div>
           </div>

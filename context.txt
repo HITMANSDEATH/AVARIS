@@ -1,0 +1,264 @@
+AVARIS Project Context File
+Project Name
+
+AVARIS — AI-based Vision and Allergen Risk Identification System
+
+Project Overview
+
+AVARIS is an AI-assisted environmental and food allergen risk awareness system designed to help users identify potential allergen exposure before consumption or environmental contact.
+
+The system combines:
+
+IoT hardware sensing
+
+computer vision
+
+machine learning
+
+AI reasoning
+
+rule-based allergen matching
+
+to provide real-time allergen risk alerts.
+
+The goal of the system is awareness and prevention, not medical diagnosis.
+
+The system identifies possible allergen risks in:
+
+indoor environments
+
+food items
+
+and warns the user if the detected factors match the user's allergy profile.
+
+System Type
+
+AVARIS is a hybrid AI-IoT intelligent monitoring system that integrates:
+
+• edge hardware sensors
+• cloud/local AI inference
+• computer vision analysis
+• environmental monitoring
+
+The system architecture consists of three main layers:
+
+Hardware sensing layer
+
+AI processing layer
+
+User interface layer
+
+Hardware Components
+
+The system uses low-cost IoT hardware to capture environmental data and visual input.
+
+Main hardware components:
+
+• ESP32 microcontroller
+• ESP32-CAM camera module
+• DHT temperature and humidity sensor
+• Dust / particulate matter sensor
+
+These sensors continuously monitor the indoor environment and capture data related to conditions that may affect allergy risk.
+
+Hardware Responsibilities
+
+The hardware layer performs:
+
+• environmental data collection
+• food image capture
+• wireless data transmission to backend server
+
+Sensor data and camera images are transmitted through WiFi to the backend system for analysis.
+
+Software System Overview
+
+The AVARIS software platform processes sensor data and images to detect potential allergen risks.
+
+The backend performs the following tasks:
+
+• image analysis
+• ingredient detection
+• allergen matching
+• environmental risk analysis
+• AI explanation generation
+
+The system then sends results to the frontend dashboard.
+
+Food Image Analysis
+
+The ESP32-CAM captures an image of food.
+
+The backend receives the image and performs AI-based visual food analysis.
+
+A computer vision model analyzes the image to determine:
+
+• the type of food
+• visible ingredients
+• possible hidden ingredients inferred from known recipes
+
+The output is converted into structured ingredient data.
+
+Example:
+
+Food: Pizza
+Ingredients: wheat, cheese, tomato sauce
+Allergen Detection
+
+The system maintains a curated allergen database.
+
+Example allergens include:
+
+• peanuts
+• gluten
+• dairy
+• soy
+• shellfish
+
+The detected ingredients from the food image are compared against the user’s allergy profile.
+
+If a match is found, the system generates a risk warning.
+
+Environmental Monitoring
+
+The indoor environment is monitored using sensors.
+
+Collected parameters include:
+
+• temperature
+• humidity
+• airborne dust particles
+
+These values are analyzed to detect environmental conditions that may aggravate allergies.
+
+For example:
+
+High dust concentration → potential respiratory allergen risk
+High humidity → mold growth risk
+AI Reasoning Layer
+
+An AI reasoning model generates a natural language explanation of the detected risks.
+
+The reasoning layer explains:
+
+• what was detected
+• why it is risky
+• what allergens may be present
+
+Example output:
+
+The analyzed food appears to contain wheat and dairy ingredients.
+Since the user profile indicates gluten and dairy allergies,
+consumption of this food may pose a high allergen risk.
+
+This improves user understanding of the warning.
+
+Risk Classification
+
+The system calculates a risk level based on detected allergens.
+
+Risk levels:
+
+LOW
+No allergen detected
+
+MEDIUM
+One allergen detected
+
+HIGH
+Multiple allergens detected
+
+Frontend Dashboard
+
+The user interface displays the results of the analysis.
+
+The dashboard shows:
+
+• captured food image
+• detected food type
+• identified ingredients
+• allergens detected
+• risk level indicator
+• AI explanation
+
+Color indicators are used for quick interpretation.
+
+Green → Low risk
+Yellow → Medium risk
+Red → High risk
+
+System Workflow
+
+The AVARIS system operates using the following pipeline:
+
+Sensors monitor the environment continuously.
+
+ESP32-CAM captures food images when triggered.
+
+Data is transmitted to the backend server.
+
+AI models analyze the image and environmental data.
+
+Ingredients are extracted from the food image.
+
+Ingredients are compared against the allergen database.
+
+The system calculates allergen risk.
+
+AI generates a human-readable explanation.
+
+Results are displayed on the user dashboard.
+
+Project Goal
+
+The primary objective of AVARIS is to demonstrate how AI and IoT technologies can be combined to create intelligent health-awareness systems that help users avoid potential allergen exposure.
+
+The system focuses on:
+
+• early awareness
+• informed decision making
+• practical real-world AI applications
+
+without making medical or diagnostic claims.
+
+Important Design Constraints
+
+The project must:
+
+• run primarily on a laptop backend server
+• use low-cost IoT hardware
+• avoid expensive cloud services when possible
+• support local AI inference where feasible
+• maintain a modular architecture
+
+Technologies Used
+
+Possible technologies used in the project include:
+
+Backend:
+Python / FastAPI / Flask
+
+Computer Vision:
+Hugging Face vision models
+
+AI reasoning:
+LLM API or local language model
+
+Database:
+SQLite / PostgreSQL
+
+Frontend:
+HTML / CSS / JavaScript dashboard
+
+Hardware communication:
+ESP32 WiFi HTTP requests
+
+Key Idea
+
+AVARIS demonstrates a smart allergen awareness assistant that combines:
+
+AI vision
+IoT sensing
+knowledge-based reasoning
+
+to help users identify possible allergen risks in food and indoor environments.

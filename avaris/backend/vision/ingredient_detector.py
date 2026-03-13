@@ -1,66 +1,53 @@
-import os
-import json
-import google.generativeai as genai
-from PIL import Image
-from backend.config.settings import settings
+"""
+Gemini Vision-based Food Detection
+Uses Gemini Vision API to analyze food images and extract ingredients
+"""
 
-# Configure Gemini 
-def configure_vision():
-    # Hardcoded key fallback to match switcher
-    hardcoded_key = "AIzaSyA3JtzZiv-4FwDP8tsVkKGIHqoKvsGPjvU"
+import logging
+from backend.ai_engine.gemini_vision import analyze_food_image
+
+logger = logging.getLogger(__name__)
+
+def detect_ingredients(image_path: str) -> dict:
+    """
+    Analyze food image using Gemini Vision API
     
-    if hardcoded_key and hardcoded_key not in ["", "YOUR_API_KEY_HERE"]:
-        genai.configure(api_key=hardcoded_key)
-        print("AVARIS DEBUG: Vision Gemini configured with hardcoded key.")
-        return True
-    elif settings.GEMINI_API_KEY and settings.GEMINI_API_KEY != "YOUR_API_KEY_HERE":
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        print("AVARIS DEBUG: Vision Gemini configured via Settings.")
-        return True
-    print("AVARIS DEBUG: Vision Gemini NOT configured.")
-    return False
-
-def detect_ingredients(image_path: str):
-    """
-    Sends the uploaded image to Google Gemini Vision API to detect ingredients.
-    """
-    if not configure_vision():
-        return {"error": "Gemini API Key not configured or invalid placeholder used."}
-
-    try:
-        img = Image.open(image_path)
-        model = genai.GenerativeModel('gemini-2.5-flash') # Using Gemini 2.5 Flash as requested
+    Args:
+        image_path (str): Path to the food image
         
-        prompt = """
-        Analyze this food image.
-
-        Identify:
-        1. The food item.
-        2. Visible ingredients in the image.
-        3. Possible hidden ingredients commonly associated with this dish.
-
-        Return the response strictly in JSON format using this structure:
-        {
-         "food_item": "",
-         "ingredients": [],
-         "confidence_score": 0.0
+    Returns:
+        dict: {
+            "food_item": str,
+            "ingredients": list,
+            "confidence": float
         }
-        """
-
-        response = model.generate_content([prompt, img])
+    """
+    try:
+        logger.info(f"Analyzing food image with Gemini Vision: {image_path}")
         
-        # Clean up Markdown formatting if any (Gemini often wraps JSON in ```json blocks)
-        text_response = response.text.strip()
-        if text_response.startswith("```json"):
-            text_response = text_response.split("```json")[1].split("```")[0].strip()
-        elif text_response.startswith("```"):
-            text_response = text_response.split("```")[1].split("```")[0].strip()
-            
-        return json.loads(text_response)
+        # Use Gemini Vision to analyze the image
+        result = analyze_food_image(image_path)
+        
+        if "error" in result:
+            logger.error(f"Gemini Vision analysis failed: {result['error']}")
+            return result
+        
+        food_item = result.get("food_item", "Unknown")
+        ingredients = result.get("ingredients", [])
+        confidence = result.get("confidence", 0.0)
+        
+        logger.info(f"Gemini Vision detected: {food_item}")
+        logger.info(f"Ingredients found: {ingredients}")
+        logger.info(f"Confidence: {confidence}")
+        
+        return {
+            "food_item": food_item,
+            "ingredients": ingredients,
+            "confidence": confidence
+        }
+        
     except Exception as e:
+        logger.error(f"Error in detect_ingredients: {e}")
         import traceback
-        print("!" * 50)
-        print(f"CRITICAL GEMINI VISION ERROR: {e}")
         traceback.print_exc()
-        print("!" * 50)
         return {"error": str(e)}

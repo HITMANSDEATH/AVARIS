@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 const API_BASE = 'http://localhost:8000/api';
@@ -27,6 +27,8 @@ function App() {
   const [anomalies, setAnomalies] = useState([]);
   const [forecast, setForecast] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showCameraPanel, setShowCameraPanel] = useState(false);
+  const [foodAnalysisResult, setFoodAnalysisResult] = useState(null);
 
   const fetchData = async () => {
     try {
@@ -64,6 +66,13 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
+  const handleCameraCapture = (result) => {
+    // Update the food analysis result when camera captures
+    setFoodAnalysisResult(result);
+    // Close camera panel after successful capture
+    setShowCameraPanel(false);
+  };
+
   if (loading) {
     return (
       <div className="app-container" style={{ justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -84,6 +93,25 @@ function App() {
           <small style={{ color: 'var(--text-muted)' }}>Auto-sync active</small>
         </div>
       </header>
+
+      {/* AVARIS Cam Button */}
+      <div style={{ textAlign: 'center', margin: '1rem 0' }}>
+        <button 
+          className="btn-primary avaris-cam-btn"
+          onClick={() => setShowCameraPanel(!showCameraPanel)}
+        >
+          📷 AVARIS Cam
+        </button>
+      </div>
+
+      {/* Camera Panel */}
+      {showCameraPanel && (
+        <CameraPanel 
+          API_BASE={API_BASE} 
+          onClose={() => setShowCameraPanel(false)}
+          onCapture={handleCameraCapture}
+        />
+      )}
 
       <main className="dashboard-grid">
         {/* Sensor Readings */}
@@ -188,32 +216,287 @@ function App() {
         </div>
       </main>
 
-      <FoodAnalysisPanel API_BASE={API_BASE} />
+      <FoodAnalysisPanel 
+        API_BASE={API_BASE} 
+        cameraResult={foodAnalysisResult}
+        onResultUpdate={setFoodAnalysisResult}
+      />
     </div>
   );
 }
 
-function FoodAnalysisPanel({ API_BASE }) {
+function CameraPanel({ API_BASE, onClose, onCapture }) {
+  const [cameraAvailable, setCameraAvailable] = useState(true);
+  const [capturing, setCapturing] = useState(false);
+  const [error, setError] = useState(null);
+  const [streamLoaded, setStreamLoaded] = useState(false);
+  const [streamPaused, setStreamPaused] = useState(false);
+  const imgRef = useRef(null);
+  const refreshIntervalRef = useRef(null);
+
+  // Direct ESP32-CAM URLs
+  const ESP32_CAM_IP = '192.168.1.40';
+  const streamUrl = `http://${ESP32_CAM_IP}/stream`;
+
+  useEffect(() => {
+    // Setup keyboard listener for Enter key - only when camera panel is open
+    const handleKeyPress = (event) => {
+      if (event.key === 'Enter' && !capturing && cameraAvailable && !streamPaused) {
+        event.preventDefault();
+        captureSequence();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyPress);
+    return () => document.removeEventListener('keydown', handleKeyPress);
+  }, [capturing, cameraAvailable, streamPaused]);
+
+  useEffect(() => {
+    // Optimized stream loading - start immediately and refresh periodically
+    if (imgRef.current && !streamPaused) {
+      // Set initial stream URL
+      imgRef.current.src = streamUrl;
+      
+      // Start refresh interval
+      startStreamRefresh();
+    }
+
+    return () => stopStreamRefresh();
+  }, [streamUrl, streamLoaded, streamPaused]);
+
+  const startStreamRefresh = () => {
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+    }
+    
+    refreshIntervalRef.current = setInterval(() => {
+      if (imgRef.current && streamLoaded && !streamPaused) {
+        const timestamp = new Date().getTime();
+        imgRef.current.src = `${streamUrl}?t=${timestamp}`;
+      }
+    }, 100);
+  };
+
+  const stopStreamRefresh = () => {
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+      refreshIntervalRef.current = null;
+    }
+  };
+
+  const pauseStream = () => {
+    console.log('🛑 Stopping stream display for capture...');
+    setStreamPaused(true);
+    stopStreamRefresh();
+    
+    // Actually stop displaying the stream by clearing the src
+    if (imgRef.current) {
+      imgRef.current.src = '';  // Clear the stream source
+      imgRef.current.style.display = 'none';  // Hide the image element
+    }
+  };
+
+  const resumeStream = () => {
+    console.log('▶️ Restarting stream display after capture...');
+    setStreamPaused(false);
+    
+    if (imgRef.current) {
+      imgRef.current.style.display = 'block';  // Show the image element
+      // Force refresh with new timestamp to restart stream
+      const timestamp = new Date().getTime();
+      imgRef.current.src = `${streamUrl}?t=${timestamp}`;
+    }
+    
+    // Restart refresh interval
+    startStreamRefresh();
+  };
+
+  const captureSequence = async () => {
+    console.log('🔥 Enter key pressed - starting capture sequence...');
+    setCapturing(true);
+    setError(null);
+
+    try {
+      // 1️⃣ Pause the stream
+      pauseStream();
+      
+      // Small delay to ensure stream is paused
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // 2️⃣ Call /capture and 3️⃣ Send to AI pipeline
+      console.log('📸 Calling backend capture...');
+      const response = await fetch(`${API_BASE}/capture-food-image`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const data = await response.json();
+      console.log('✅ Capture and analysis successful:', data);
+      
+      // Pass result to parent component
+      onCapture(data);
+      
+    } catch (err) {
+      console.error('❌ Capture sequence failed:', err);
+      setError(`Capture failed: ${err.message}`);
+    } finally {
+      // 4️⃣ Resume the stream (always, even on error)
+      setTimeout(() => {
+        resumeStream();
+        setCapturing(false);
+      }, 500); // Small delay before resuming
+    }
+  };
+
+  const handleStreamError = () => {
+    console.error('❌ Stream error');
+    setCameraAvailable(false);
+    setStreamLoaded(false);
+    setError('ESP32-CAM stream connection lost. Check camera at ' + ESP32_CAM_IP);
+  };
+
+  const handleStreamLoad = () => {
+    console.log('✅ Stream loaded successfully');
+    setCameraAvailable(true);
+    setStreamLoaded(true);
+    setError(null);
+  };
+
+  return (
+    <div className="camera-panel-overlay">
+      <div className="camera-panel">
+        <div className="camera-panel-header">
+          <h3>📷 AVARIS Camera Feed</h3>
+          <button className="close-btn" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="camera-content">
+          <div className="camera-stream-container">
+            <div className="stream-wrapper">
+              <img
+                ref={imgRef}
+                id="avarisCamFeed"
+                src={streamUrl}
+                width="480"
+                height="360"
+                alt="AVARIS Camera Feed"
+                className="camera-stream"
+                onError={handleStreamError}
+                onLoad={handleStreamLoad}
+                style={{ 
+                  opacity: streamLoaded ? 1 : 0.5,
+                  transition: 'opacity 0.3s ease',
+                  display: streamPaused ? 'none' : 'block'
+                }}
+              />
+              
+              {/* Show placeholder when stream is paused */}
+              {streamPaused && (
+                <div className="stream-placeholder">
+                  <div className="placeholder-content">
+                    <div className="capture-icon">📸</div>
+                    <p>Capturing Image...</p>
+                    <div className="capture-progress">
+                      <div className="progress-bar"></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {!streamLoaded && !streamPaused && (
+                <div className="stream-loading">
+                  <div className="loading-spinner">🔄</div>
+                  <p>Loading camera stream...</p>
+                </div>
+              )}
+              
+              <div className="stream-overlay">
+                {streamPaused ? (
+                  <div className="capture-in-progress">
+                    <div className="capturing-indicator">
+                      📸 Capturing & Analyzing...
+                    </div>
+                    <div className="stream-status">
+                      Stream stopped
+                    </div>
+                  </div>
+                ) : (
+                  <div className="capture-instruction">
+                    Press <kbd>Enter</kbd> to capture
+                  </div>
+                )}
+                
+                <div className="stream-info">
+                  ESP32-CAM: {ESP32_CAM_IP} {streamPaused ? '(Stopped)' : '(Live)'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {error && (
+            <div className="camera-error">
+              ⚠️ {error}
+            </div>
+          )}
+
+          {!cameraAvailable && (
+            <div className="camera-unavailable">
+              <p>📷 ESP32-CAM Unavailable</p>
+              <small>Check camera connection at {ESP32_CAM_IP}</small>
+              <button 
+                className="retry-btn" 
+                onClick={() => {
+                  setCameraAvailable(true);
+                  setStreamLoaded(false);
+                  setStreamPaused(false);
+                  setError(null);
+                  if (imgRef.current) {
+                    imgRef.current.src = `${streamUrl}?t=${new Date().getTime()}`;
+                  }
+                }}
+              >
+                Retry Connection
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FoodAnalysisPanel({ API_BASE, cameraResult, onResultUpdate }) {
   const [file, setFile] = useState(null);
   const [result, setResult] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Update result when camera captures or component mounts
   useEffect(() => {
-    // Fetch latest analysis on load
-    const fetchLatest = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/latest-food-analysis`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data) setResult(data);
+    if (cameraResult) {
+      setResult(cameraResult);
+    } else {
+      // Fetch latest analysis on load if no camera result
+      const fetchLatest = async () => {
+        try {
+          const res = await fetch(`${API_BASE}/latest-food-analysis`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data) {
+              setResult(data);
+              onResultUpdate(data);
+            }
+          }
+        } catch (e) {
+          console.error("Error fetching latest food analysis:", e);
         }
-      } catch (e) {
-        console.error("Error fetching latest food analysis:", e);
-      }
-    };
-    fetchLatest();
-  }, [API_BASE]);
+      };
+      fetchLatest();
+    }
+  }, [API_BASE, cameraResult, onResultUpdate]);
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
@@ -244,6 +527,7 @@ function FoodAnalysisPanel({ API_BASE }) {
 
       const data = await response.json();
       setResult(data);
+      onResultUpdate(data);
       setFile(null);
     } catch (err) {
       setError(`Upload failed: ${err.message}`);

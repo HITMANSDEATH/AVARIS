@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pause/Resume Stream Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .stream-container {
+            position: relative;
+            display: inline-block;
+            margin: 20px 0;
+        }
+        
+        #testStream {
+            width: 480px;
+            height: 360px;
+            border-radius: 8px;
+            border: 2px solid #00ffcc;
+            transition: opacity 0.3s ease;
+        }
+        
+        .overlay {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 255, 204, 0.9);
+            color: black;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+        
+        .paused-overlay {
+            background: rgba(255, 68, 68, 0.9);
+            color: white;
+        }
+        
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            background: #00ffcc;
+            color: black;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            background: #00aaff;
+            transform: translateY(-1px);
+        }
+        
+        button:disabled {
+            background: #666;
+            color: #999;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .log {
+            background: #333;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .success { color: #00ff00; }
+        .error { color: #ff4444; }
+        .info { color: #00ffcc; }
+        .warning { color: #ffaa00; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Stream Pause/Resume Test</h1>
+        <p>Testing the new capture sequence: Pause → Capture → Resume</p>
+        
+        <div class="stream-container">
+            <img id="testStream" 
+                 src="http://192.168.1.40/stream" 
+                 alt="ESP32-CAM Test Stream"
+                 onload="onStreamLoad()"
+                 onerror="onStreamError()">
+            <div id="streamOverlay" class="overlay">
+                Press <kbd>Enter</kbd> or test buttons
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button onclick="pauseStream()" id="pauseBtn">⏸️ Pause Stream</button>
+            <button onclick="resumeStream()" id="resumeBtn" disabled>▶️ Resume Stream</button>
+            <button onclick="testCapture()" id="captureBtn">📸 Test Capture</button>
+            <button onclick="testFullSequence()" id="sequenceBtn">🔄 Full Sequence</button>
+            <button onclick="clearLog()">🗑️ Clear Log</button>
+        </div>
+        
+        <div class="log" id="logContainer">
+            <div class="info">🔄 Initializing stream test...</div>
+        </div>
+    </div>
+
+    <script>
+        let streamPaused = false;
+        let refreshInterval = null;
+        let sequenceRunning = false;
+        
+        const stream = document.getElementById('testStream');
+        const overlay = document.getElementById('streamOverlay');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const resumeBtn = document.getElementById('resumeBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const sequenceBtn = document.getElementById('sequenceBtn');
+        
+        function logMessage(message, type = 'info') {
+            const log = document.getElementById('logContainer');
+            const timestamp = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.className = type;
+            div.innerHTML = `[${timestamp}] ${message}`;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('logContainer').innerHTML = '';
+        }
+        
+        function startStreamRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+            
+            refreshInterval = setInterval(() => {
+                if (!streamPaused) {
+                    const timestamp = new Date().getTime();
+                    stream.src = `http://192.168.1.40/stream?t=${timestamp}`;
+                }
+            }, 100);
+            
+            logMessage('🔄 Stream refresh started (100ms interval)', 'info');
+        }
+        
+        function stopStreamRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+            logMessage('⏹️ Stream refresh stopped', 'warning');
+        }
+        
+        function pauseStream() {
+            if (streamPaused) return;
+            
+            logMessage('🛑 Stopping stream display...', 'warning');
+            streamPaused = true;
+            stopStreamRefresh();
+            
+            // Actually stop the stream by clearing src and hiding
+            stream.src = '';
+            stream.style.display = 'none';
+            
+            // Show placeholder
+            overlay.textContent = 'Stream Stopped - Capturing...';
+            overlay.className = 'overlay paused-overlay';
+            
+            // Update buttons
+            pauseBtn.disabled = true;
+            resumeBtn.disabled = false;
+            
+            logMessage('✅ Stream display stopped', 'success');
+        }
+        
+        function resumeStream() {
+            if (!streamPaused) return;
+            
+            logMessage('▶️ Restarting stream display...', 'info');
+            streamPaused = false;
+            
+            // Show stream element again
+            stream.style.display = 'block';
+            
+            // Restart stream with fresh timestamp
+            const timestamp = new Date().getTime();
+            stream.src = `http://192.168.1.40/stream?t=${timestamp}`;
+            
+            // Visual feedback
+            overlay.textContent = 'Press Enter or test buttons';
+            overlay.className = 'overlay';
+            
+            // Restart refresh
+            startStreamRefresh();
+            
+            // Update buttons
+            pauseBtn.disabled = false;
+            resumeBtn.disabled = true;
+            
+            logMessage('✅ Stream display restarted', 'success');
+        }
+        
+        function testCapture() {
+            logMessage('📸 Testing direct capture...', 'info');
+            
+            fetch('http://192.168.1.40/capture', { timeout: 10000 })
+                .then(response => {
+                    if (response.ok) {
+                        logMessage(`✅ Direct capture successful (${response.headers.get('content-length')} bytes)`, 'success');
+                        return response.blob();
+                    } else {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                })
+                .then(blob => {
+                    logMessage(`📊 Image size: ${blob.size} bytes`, 'info');
+                })
+                .catch(error => {
+                    logMessage(`❌ Direct capture failed: ${error.message}`, 'error');
+                });
+        }
+        
+        async function testFullSequence() {
+            if (sequenceRunning) return;
+            
+            sequenceRunning = true;
+            sequenceBtn.disabled = true;
+            
+            try {
+                logMessage('🚀 Starting full capture sequence...', 'info');
+                
+                // 1️⃣ Pause stream
+                logMessage('1️⃣ Pausing stream...', 'info');
+                pauseStream();
+                
+                // Small delay
+                await new Promise(resolve => setTimeout(resolve, 200));
+                
+                // 2️⃣ Test capture
+                logMessage('2️⃣ Testing capture...', 'info');
+                const response = await fetch('http://localhost:8000/api/capture-food-image', {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    logMessage('3️⃣ ✅ Backend capture successful!', 'success');
+                    logMessage(`📊 Food: ${data.food_item}`, 'info');
+                    logMessage(`🥘 Ingredients: ${data.ingredients.join(', ')}`, 'info');
+                    logMessage(`⚠️ Risk: ${data.risk_level}`, data.risk_level === 'HIGH' ? 'error' : 'info');
+                } else {
+                    throw new Error(`Backend failed: ${response.status}`);
+                }
+                
+                // 4️⃣ Resume stream
+                logMessage('4️⃣ Resuming stream...', 'info');
+                await new Promise(resolve => setTimeout(resolve, 500));
+                resumeStream();
+                
+                logMessage('🎉 Full sequence completed successfully!', 'success');
+                
+            } catch (error) {
+                logMessage(`❌ Sequence failed: ${error.message}`, 'error');
+                // Always resume stream on error
+                resumeStream();
+            } finally {
+                sequenceRunning = false;
+                sequenceBtn.disabled = false;
+            }
+        }
+        
+        function onStreamLoad() {
+            logMessage('✅ Stream loaded successfully', 'success');
+        }
+        
+        function onStreamError() {
+            logMessage('❌ Stream failed to load', 'error');
+        }
+        
+        // Enter key listener
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter' && !sequenceRunning) {
+                event.preventDefault();
+                logMessage('🔥 Enter key pressed! Starting sequence...', 'info');
+                testFullSequence();
+            }
+        });
+        
+        // Initialize
+        window.onload = function() {
+            logMessage('🚀 Test initialized', 'info');
+            logMessage('📡 Stream URL: http://192.168.1.40/stream', 'info');
+            logMessage('🎯 Backend API: http://localhost:8000/api/capture-food-image', 'info');
+            logMessage('⌨️ Press Enter or use buttons to test', 'info');
+            
+            // Start stream refresh
+            startStreamRefresh();
+        };
+    </script>
+</body>
+</html>

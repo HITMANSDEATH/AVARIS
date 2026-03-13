@@ -1,5 +1,68 @@
 # AVARIS System Flow Diagram
 
+## ESP32-CAM Live Feed Integration
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         ESP32-CAM LIVE FEED PIPELINE                 │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                    ESP32-CAM Hardware                                │
+│  • MJPEG Stream: http://ESP32_IP:81/stream                          │
+│  • Image Capture: http://ESP32_IP/capture                           │
+│  • LED Control: http://ESP32_IP/led/on|off                          │
+│  • Stream Settings: QVGA (320x240), Quality 12                      │
+│  • Capture Settings: SVGA (800x600), Quality 10                     │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    FRONTEND DASHBOARD                                │
+│  • AVARIS Cam Button → Opens camera panel                           │
+│  • Live Stream Display: <img src="stream_url?t=timestamp">          │
+│  • Auto-refresh every 200ms to prevent freezing                     │
+│  • Enter Key Listener → Triggers capture                            │
+│  • Capture Instruction Overlay                                      │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │ (User presses Enter)
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    BACKEND API (/capture-food-image)                 │
+│  1. Check ESP32-CAM availability                                    │
+│  2. Turn LED ON (200ms flash)                                       │
+│  3. Capture high-quality image (SVGA)                               │
+│  4. Turn LED OFF                                                    │
+│  5. Save to uploads/avaris_cam/cam_capture_timestamp.jpg            │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│              GEMINI VISION API ANALYSIS (Same as Upload)             │
+│  • Analyze captured image                                           │
+│  • Extract food item and ingredients                                │
+│  • Calculate confidence score                                       │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│              ALLERGEN DETECTION & AI EXPLANATION                     │
+│  • Local allergen matching                                          │
+│  • Risk level calculation                                           │
+│  • Gemini text API for safety guidance                              │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    CAMERA PANEL RESULT DISPLAY                       │
+│  • Show captured image                                              │
+│  • Display food item identification                                 │
+│  • List detected ingredients                                        │
+│  • Highlight allergens with risk color coding                       │
+│  • Show AI safety explanation                                       │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
 ## Complete Food Analysis Pipeline - Two-Stage Gemini AI
 
 ```

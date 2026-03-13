@@ -1,0 +1,1 @@
+# Camera module for ESP32-CAM integration

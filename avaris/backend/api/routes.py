@@ -10,6 +10,7 @@ from backend.database.models import get_db, SensorData, RiskPrediction, AnomalyE
 from backend.ai_engine.reasoning import explain_anomaly, explain_risk, explain_food_risk
 from backend.vision.ingredient_detector import detect_ingredients
 from ml.allergen_checker import check_ingredients_for_allergens
+from backend.camera.esp32_cam import capture_from_esp32, get_esp32_camera
 from fastapi import File, UploadFile
 import json
 import time
@@ -257,4 +258,85 @@ def get_latest_food_analysis(db: Session = Depends(get_db)):
         "detected_allergens": json.loads(log.detected_allergens),
         "risk_level": log.risk_level,
         "ai_explanation": log.ai_explanation
+    }
+
+@router.post("/capture-food-image")
+async def capture_food_image(db: Session = Depends(get_db)):
+    """Capture image from ESP32-CAM, analyze for allergens using Gemini Vision API, and store result."""
+    try:
+        # 1. Capture Image from ESP32-CAM
+        camera = get_esp32_camera()
+        
+        # Use direct capture since frontend pauses stream to prevent conflicts
+        logger.info("Capturing image from ESP32-CAM (stream paused by frontend)...")
+        
+        capture_result = camera.capture_image(use_flash=True)
+        
+        if not capture_result["success"]:
+            logger.error(f"ESP32-CAM capture failed: {capture_result['error']}")
+            raise HTTPException(status_code=500, detail=capture_result["error"])
+            
+        file_path = capture_result["image_path"]
+        logger.info(f"Captured image from ESP32-CAM: {file_path}")
+            
+        # 2. Analyze Image using Gemini Vision API
+        from backend.ai_engine.gemini_vision import analyze_food_image_gemini
+        
+        analysis = analyze_food_image_gemini(file_path)
+        
+        if "error" in analysis:
+            logger.error(f"Gemini analysis failed: {analysis['error']}")
+            raise HTTPException(status_code=500, detail=analysis["error"])
+            
+        food_item = analysis.get("food_item", "Unknown")
+        ingredients = analysis.get("ingredients", [])
+        confidence = analysis.get("confidence", 0.0)
+        
+        logger.info(f"Gemini analysis complete - Food: {food_item}, Ingredients: {ingredients}")
+        
+        # 3. Check for Allergens using existing allergen checker
+        detected_allergens, risk_level = check_ingredients_for_allergens(ingredients)
+        
+        logger.info(f"Allergen check complete - Allergens: {detected_allergens}, Risk: {risk_level}")
+        
+        # 4. Generate AI Explanation
+        ai_explanation = explain_food_risk(food_item, ingredients, detected_allergens, risk_level)
+        
+        # 5. Log to Database
+        db_log = FoodAnalysisLog(
+            image_path=file_path,
+            food_item=food_item,
+            ingredients=json.dumps(ingredients),
+            detected_allergens=json.dumps(detected_allergens),
+            risk_level=risk_level,
+            ai_explanation=ai_explanation
+        )
+        db.add(db_log)
+        db.commit()
+        db.refresh(db_log)
+        
+        logger.info(f"ESP32-CAM analysis logged to database with ID: {db_log.id}")
+        
+        return {
+            "food_item": food_item,
+            "ingredients": ingredients,
+            "detected_allergens": detected_allergens,
+            "risk_level": risk_level,
+            "confidence": confidence,
+            "ai_explanation": ai_explanation,
+            "image_url": f"/uploads/avaris_cam/{capture_result['filename']}"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in capture_food_image: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/camera/stream-url")
+def get_camera_stream_url():
+    """Get the ESP32-CAM MJPEG stream URL."""
+    camera = get_esp32_camera()
+    return {
+        "stream_url": camera.get_stream_url(),
+        "available": camera.is_available()
     }

@@ -155,3 +155,15 @@ def analyze_food_image(image_path: str) -> dict:
     """
     analyzer = get_vision_analyzer()
     return analyzer.analyze_food_image(image_path)
+
+def analyze_food_image_gemini(image_path: str) -> dict:
+    """
+    Alias for analyze_food_image for backward compatibility
+    
+    Args:
+        image_path (str): Path to the food image
+        
+    Returns:
+        dict: Analysis result with food_item, ingredients, and confidence
+    """
+    return analyze_food_image(image_path)

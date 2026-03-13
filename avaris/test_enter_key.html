@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enter Key Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .test-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: #2a2a2a;
+            border-radius: 12px;
+            padding: 20px;
+        }
+        
+        .stream-container {
+            position: relative;
+            display: inline-block;
+            margin: 20px 0;
+        }
+        
+        #testStream {
+            width: 480px;
+            height: 360px;
+            border-radius: 8px;
+            border: 2px solid #00ffcc;
+        }
+        
+        .overlay {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 255, 204, 0.9);
+            color: black;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+        
+        .log {
+            background: #333;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .success { color: #00ff00; }
+        .error { color: #ff4444; }
+        .info { color: #00ffcc; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🔍 Enter Key Capture Test</h1>
+        <p>This tests the Enter key functionality for ESP32-CAM capture</p>
+        
+        <div class="stream-container">
+            <img id="testStream" 
+                 src="http://192.168.1.40/stream" 
+                 alt="ESP32-CAM Test Stream"
+                 onload="logMessage('Stream loaded successfully', 'success')"
+                 onerror="logMessage('Stream failed to load', 'error')">
+            <div class="overlay">
+                Press <kbd>Enter</kbd> to test capture
+            </div>
+        </div>
+        
+        <div class="log" id="logContainer">
+            <div class="info">🔄 Initializing test...</div>
+        </div>
+        
+        <button onclick="testCapture()">🧪 Manual Test Capture</button>
+        <button onclick="clearLog()">🗑️ Clear Log</button>
+    </div>
+
+    <script>
+        let captureCount = 0;
+        
+        function logMessage(message, type = 'info') {
+            const log = document.getElementById('logContainer');
+            const timestamp = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.className = type;
+            div.innerHTML = `[${timestamp}] ${message}`;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('logContainer').innerHTML = '';
+        }
+        
+        function testCapture() {
+            captureCount++;
+            logMessage(`🔥 Manual capture test #${captureCount}`, 'info');
+            
+            // Test backend capture endpoint
+            fetch('http://localhost:8000/api/capture-food-image', {
+                method: 'POST'
+            })
+            .then(response => {
+                if (response.ok) {
+                    logMessage('✅ Backend capture successful!', 'success');
+                    return response.json();
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            })
+            .then(data => {
+                logMessage(`📊 Analysis result: ${data.food_item}`, 'success');
+                logMessage(`🥘 Ingredients: ${data.ingredients.join(', ')}`, 'info');
+                logMessage(`⚠️ Allergens: ${data.detected_allergens.join(', ')}`, 'error');
+                logMessage(`🎯 Risk Level: ${data.risk_level}`, data.risk_level === 'HIGH' ? 'error' : 'info');
+            })
+            .catch(error => {
+                logMessage(`❌ Capture failed: ${error.message}`, 'error');
+            });
+        }
+        
+        // Enter key listener
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                captureCount++;
+                logMessage(`🔥 Enter key pressed! Capture #${captureCount}`, 'info');
+                testCapture();
+            }
+        });
+        
+        // Stream refresh mechanism
+        setInterval(() => {
+            const stream = document.getElementById('testStream');
+            const timestamp = new Date().getTime();
+            stream.src = `http://192.168.1.40/stream?t=${timestamp}`;
+        }, 100);
+        
+        // Initialize
+        logMessage('🚀 Test initialized. Press Enter or click Manual Test button.', 'info');
+        logMessage('📡 Stream refresh: 100ms interval', 'info');
+        logMessage('🎯 Backend API: http://localhost:8000/api/capture-food-image', 'info');
+    </script>
+</body>
+</html>

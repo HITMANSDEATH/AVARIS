@@ -1,35 +1,12 @@
 """
 Reasoning Module for AVARIS
-Provides AI-powered explanations for anomalies, risks, and food allergen analysis using Gemini
+Provides AI-powered explanations for risks and food allergen analysis using Gemini
 """
 
 from backend.ai_engine.text_analyzer import generate_ai_text
 import logging
 
 logger = logging.getLogger(__name__)
-
-def explain_anomaly(temperature: float, humidity: float, dust: float) -> str:
-    """
-    Generate an AI explanation for a detected anomaly based on sensor readings.
-    """
-    prompt = f"""
-    You are AVARIS, an AI Environmental Risk Monitor. 
-    An anomaly was detected with the following indoor environmental readings:
-    - Temperature: {temperature} °C
-    - Humidity: {humidity} %
-    - Dust Level: {dust} μg/m³
-    
-    Please provide:
-    1. A brief explanation of why these readings are anomalous.
-    2. A short recommended safety action.
-    Keep it concise and actionable.
-    """
-    
-    try:
-        return generate_ai_text(prompt)
-    except Exception as e:
-        logger.error(f"Error generating anomaly explanation: {e}")
-        return _fallback_explain_anomaly(temperature, humidity, dust)
 
 def explain_risk(risk_level: str, temperature: float, humidity: float, dust: float) -> str:
     """
@@ -83,29 +60,6 @@ def explain_food_risk(food_item: str, ingredients: list, detected_allergens: lis
         return _fallback_explain_food_risk(food_item, ingredients, detected_allergens, risk_level)
 
 # Fallback explanations (used when Gemini is unavailable)
-
-def _fallback_explain_anomaly(temperature: float, humidity: float, dust: float) -> str:
-    """Fallback explanation for anomalies"""
-    explanations = []
-    
-    if temperature > 30:
-        explanations.append(f"High temperature ({temperature}°C) detected")
-    elif temperature < 15:
-        explanations.append(f"Low temperature ({temperature}°C) detected")
-    
-    if humidity > 70:
-        explanations.append(f"High humidity ({humidity}%) detected")
-    elif humidity < 30:
-        explanations.append(f"Low humidity ({humidity}%) detected")
-    
-    if dust > 50:
-        explanations.append(f"High dust levels ({dust} μg/m³) detected")
-    
-    if not explanations:
-        explanations.append("Environmental readings are outside normal parameters")
-    
-    explanation = ". ".join(explanations)
-    return f"Anomaly detected: {explanation}. Recommended action: Check ventilation systems and air filters immediately."
 
 def _fallback_explain_risk(risk_level: str, temperature: float, humidity: float, dust: float) -> str:
     """Fallback explanation for risk levels"""

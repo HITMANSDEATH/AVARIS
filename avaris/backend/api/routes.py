@@ -6,8 +6,8 @@ import numpy as np
 import joblib
 import os
 
-from backend.database.models import get_db, SensorData, RiskPrediction, AnomalyEvent, FoodAnalysisLog
-from backend.ai_engine.reasoning import explain_anomaly, explain_risk, explain_food_risk
+from backend.database.models import get_db, SensorData, RiskPrediction, FoodAnalysisLog
+from backend.ai_engine.reasoning import explain_risk, explain_food_risk
 from backend.vision.ingredient_detector import detect_ingredients
 from ml.allergen_checker import check_ingredients_for_allergens
 from backend.camera.esp32_cam import capture_from_esp32, get_esp32_camera
@@ -22,7 +22,6 @@ router = APIRouter()
 
 # Load Models
 RISK_MODEL_PATH = "backend/ml_models/risk_model.pkl"
-ANOMALY_MODEL_PATH = "backend/ml_models/anomaly_model.pkl"
 FORECAST_MODEL_PATH = "backend/ml_models/forecast_model.pkl"
 
 def load_model(path):
@@ -31,8 +30,74 @@ def load_model(path):
     return None
 
 risk_model = load_model(RISK_MODEL_PATH)
-anomaly_model = load_model(ANOMALY_MODEL_PATH)
 forecast_model = load_model(FORECAST_MODEL_PATH)
+
+def calculate_rule_based_risk(temperature: float, humidity: float, dust: float) -> tuple[str, float]:
+    """
+    Calculate risk level using rule-based logic when ML model is not available.
+    Returns (risk_level, confidence)
+    """
+    risk_factors = []
+    risk_score = 0
+    
+    # Temperature risk assessment
+    if temperature > 35:
+        risk_factors.append("Extreme high temperature")
+        risk_score += 3
+    elif temperature > 30:
+        risk_factors.append("High temperature")
+        risk_score += 2
+    elif temperature < 10:
+        risk_factors.append("Extreme low temperature")
+        risk_score += 3
+    elif temperature < 15:
+        risk_factors.append("Low temperature")
+        risk_score += 1
+    
+    # Humidity risk assessment
+    if humidity > 80:
+        risk_factors.append("Very high humidity")
+        risk_score += 2
+    elif humidity > 70:
+        risk_factors.append("High humidity")
+        risk_score += 1
+    elif humidity < 20:
+        risk_factors.append("Very low humidity")
+        risk_score += 2
+    elif humidity < 30:
+        risk_factors.append("Low humidity")
+        risk_score += 1
+    
+    # Dust level risk assessment (more sensitive)
+    if dust > 120:
+        risk_factors.append("Dangerous dust levels")
+        risk_score += 4
+    elif dust > 100:
+        risk_factors.append("Very high dust levels")
+        risk_score += 3
+    elif dust > 75:
+        risk_factors.append("High dust levels")
+        risk_score += 2
+    elif dust > 50:
+        risk_factors.append("Elevated dust levels")
+        risk_score += 1
+    
+    # Determine overall risk level (adjusted thresholds)
+    if risk_score >= 7:
+        risk_level = "CRITICAL"
+        confidence = 0.9
+    elif risk_score >= 5:
+        risk_level = "HIGH"
+        confidence = 0.85
+    elif risk_score >= 2:
+        risk_level = "MEDIUM"
+        confidence = 0.8
+    else:
+        risk_level = "LOW"
+        confidence = 0.75
+    
+    logger.info(f"Rule-based risk assessment: {risk_level} (score: {risk_score}, factors: {risk_factors})")
+    return risk_level, confidence
 
 from pydantic import BaseModel
 
@@ -44,9 +109,11 @@ class SensorPayload(BaseModel):
 
 @router.post("/sensor-data")
 def receive_sensor_data(payload: SensorPayload, db: Session = Depends(get_db)):
-    """Receive data from ESP32, predict risk/anomaly, and store."""
+    """Receive data from ESP32, predict risk, and store."""
     
     try:
+        logger.info(f"Received sensor data: T={payload.temperature}°C, H={payload.humidity}%, D={payload.dust}µg/m³")
+        
         # Storage
         db_sensor = SensorData(
             temperature=payload.temperature,
@@ -70,57 +137,84 @@ def receive_sensor_data(payload: SensorPayload, db: Session = Depends(get_db)):
             "dust": payload.dust
         }])
 
-        # 1. Anomaly Detection
-        is_anomaly = False
-        if anomaly_model:
-            pred_anomaly = anomaly_model.predict(features)[0]
-            # Isolation Forest: -1 is anomaly, 1 is normal
-            is_anomaly = bool(pred_anomaly == -1)
-            
-            if is_anomaly:
-                # Generate AI Explanation
-                explanation = explain_anomaly(payload.temperature, payload.humidity, payload.dust)
-                
-                db_anomaly = AnomalyEvent(
-                    status="anomaly",
-                    description=f"Automated Alert: Anomaly Detected.\n{explanation}",
-                    recommended_action="Inspect area immediately."
-                )
-                db.add(db_anomaly)
-                db.commit()
-
-        # 2. Risk Prediction
+        # Risk Prediction - Use hybrid approach (rule-based primary, ML secondary)
         current_risk = "UNKNOWN"
+        confidence = 0.0
+        
+        # Always calculate rule-based risk first (more predictable)
+        rule_risk, rule_confidence = calculate_rule_based_risk(payload.temperature, payload.humidity, payload.dust)
+        
         if risk_model:
-            pred_risk = risk_model.predict(features)[0]
-            current_risk = str(pred_risk) # Ensure it's a standard string
-            
-            # Save Risk Prediction
-            db_risk = RiskPrediction(
-                risk_level=current_risk,
-                confidence=0.95 # Mock confidence
-            )
-            db.add(db_risk)
-            db.commit()
-            
-            # Explain Critical/High Risk
-            if current_risk in ["HIGH", "CRITICAL"]:
-                risk_explanation = explain_risk(current_risk, payload.temperature, payload.humidity, payload.dust)
+            try:
+                # Get ML prediction as secondary validation
+                pred_risk = risk_model.predict(features)[0]
+                ml_risk = str(pred_risk)
                 
-                db_anomaly_risk = AnomalyEvent(
-                    status=current_risk,
-                    description=f"Risk Alert: {current_risk}.\n{risk_explanation}",
-                    recommended_action="Follow safety protocols."
-                )
-                db.add(db_anomaly_risk)
-                db.commit()
+                # Use rule-based as primary, but boost confidence if ML agrees
+                current_risk = rule_risk
+                if ml_risk == rule_risk:
+                    confidence = min(0.95, rule_confidence + 0.1)  # Boost confidence when both agree
+                    logger.info(f"ML and rule-based agree: {current_risk}")
+                else:
+                    confidence = rule_confidence
+                    logger.info(f"ML ({ml_risk}) vs Rule-based ({rule_risk}) - using rule-based")
+                    
+            except Exception as e:
+                logger.warning(f"ML risk model failed: {e}, using rule-based assessment")
+                current_risk = rule_risk
+                confidence = rule_confidence
+        else:
+            # Use rule-based risk assessment when ML model is not available
+            current_risk = rule_risk
+            confidence = rule_confidence
+            logger.info(f"Using rule-based risk assessment: {current_risk}")
+        
+        # Save Risk Prediction
+        db_risk = RiskPrediction(
+            risk_level=current_risk,
+            confidence=confidence
+        )
+        db.add(db_risk)
+        db.commit()
 
-        return {"status": "success", "risk_level": current_risk, "anomaly_detected": is_anomaly}
+        logger.info(f"Sensor data processed: Risk={current_risk}")
+        return {"status": "success", "risk_level": current_risk}
     except Exception as e:
         import traceback
-        print(f"Error in receive_sensor_data: {e}")
+        logger.error(f"Error in receive_sensor_data: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/sensor-data/batch")
+def receive_sensor_data_batch(payloads: list[SensorPayload], db: Session = Depends(get_db)):
+    """Receive multiple sensor readings in batch for efficiency."""
+    
+    try:
+        logger.info(f"Received batch of {len(payloads)} sensor readings")
+        results = []
+        
+        for payload in payloads:
+            # Process each reading individually
+            result = receive_sensor_data(payload, db)
+            results.append(result)
+        
+        return {"status": "success", "processed": len(results), "results": results}
+    except Exception as e:
+        logger.error(f"Error in batch sensor data processing: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/sensor-data/health")
+def sensor_health_check():
+    """Health check endpoint for sensor data reception."""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "endpoints": {
+            "single": "/api/sensor-data",
+            "batch": "/api/sensor-data/batch",
+            "latest": "/api/latest-sensor-data"
+        }
+    }
 
 @router.get("/latest-sensor-data")
 def get_latest_sensor_data(db: Session = Depends(get_db)):
@@ -140,18 +234,13 @@ def get_latest_risk(db: Session = Depends(get_db)):
     """Fetch the most recent risk prediction."""
     data = db.query(RiskPrediction).order_by(RiskPrediction.timestamp.desc()).first()
     if not data:
-        return {"risk_level": "LOW", "confidence": 1.0, "timestamp": datetime.utcnow().isoformat()}
+        # If no risk data exists, return a default LOW risk
+        return {"risk_level": "LOW", "confidence": 0.5, "timestamp": datetime.utcnow().isoformat()}
     return {
         "risk_level": data.risk_level,
         "confidence": data.confidence,
         "timestamp": data.timestamp.isoformat()
     }
-
-@router.get("/anomaly-events")
-def get_anomaly_events(db: Session = Depends(get_db), limit: int = 10):
-    """Fetch recent anomaly events and AI explanations."""
-    events = db.query(AnomalyEvent).order_by(AnomalyEvent.timestamp.desc()).limit(limit).all()
-    return [{"status": e.status, "description": e.description, "action": e.recommended_action, "timestamp": e.timestamp.isoformat()} for e in events]
 
 @router.get("/forecast")
 def get_forecast(db: Session = Depends(get_db)):
@@ -176,6 +265,30 @@ def get_forecast(db: Session = Depends(get_db)):
         "predicted_humidity": float(prediction[1]),
         "predicted_dust": float(prediction[2]),
         "forecast_time_mins": 30
+    }
+
+@router.get("/latest-sensors")
+def get_latest_sensors():
+    """Get the latest sensor readings from ESP32 polling service."""
+    from backend.services.sensor_poller import get_sensor_poller
+    
+    poller = get_sensor_poller()
+    latest_data = poller.get_latest_data()
+    
+    if not latest_data:
+        raise HTTPException(status_code=503, detail="No sensor data available - ESP32 may be offline")
+    
+    # Check if data is fresh (within last 30 seconds)
+    if not poller.is_data_fresh(max_age_seconds=30):
+        raise HTTPException(status_code=503, detail="Sensor data is stale - ESP32 may be offline")
+    
+    return {
+        "temperature": latest_data.get("temperature"),
+        "humidity": latest_data.get("humidity"),
+        "dust": latest_data.get("dust"),
+        "timestamp": latest_data.get("server_timestamp"),
+        "esp32_timestamp": latest_data.get("timestamp"),
+        "status": "ok"
     }
 
 @router.post("/upload-food-image")
@@ -262,21 +375,22 @@ def get_latest_food_analysis(db: Session = Depends(get_db)):
 
 @router.post("/capture-food-image")
 async def capture_food_image(db: Session = Depends(get_db)):
-    """Capture image from ESP32-CAM, analyze for allergens using Gemini Vision API, and store result."""
+    """Capture image from ESP32-CAM using robust capture method, analyze for allergens using Gemini Vision API, and store result."""
     try:
-        # 1. Capture Image from ESP32-CAM
+        # 1. Capture Image from ESP32-CAM using robust method
         camera = get_esp32_camera()
         
-        # Use direct capture since frontend pauses stream to prevent conflicts
-        logger.info("Capturing image from ESP32-CAM (stream paused by frontend)...")
+        logger.info("Capturing image from ESP32-CAM using robust capture method...")
         
-        capture_result = camera.capture_image(use_flash=True)
+        # Use the robust capture method with retries
+        capture_result = camera.capture_image_robust(use_flash=True)
         
         if not capture_result["success"]:
             logger.error(f"ESP32-CAM capture failed: {capture_result['error']}")
             raise HTTPException(status_code=500, detail=capture_result["error"])
             
         file_path = capture_result["image_path"]
+        filename = capture_result["filename"]
         logger.info(f"Captured image from ESP32-CAM: {file_path}")
             
         # 2. Analyze Image using Gemini Vision API
@@ -324,7 +438,7 @@ async def capture_food_image(db: Session = Depends(get_db)):
             "risk_level": risk_level,
             "confidence": confidence,
             "ai_explanation": ai_explanation,
-            "image_url": f"/uploads/avaris_cam/{capture_result['filename']}"
+            "image_url": f"/uploads/avaris_cam/{filename}"
         }
     except HTTPException:
         raise
@@ -340,3 +454,51 @@ def get_camera_stream_url():
         "stream_url": camera.get_stream_url(),
         "available": camera.is_available()
     }
+
+@router.post("/analyze-environment")
+def analyze_environment(db: Session = Depends(get_db)):
+    """
+    Generate AI analysis of current environmental conditions using polled sensor data.
+    Only called when user presses the Environment Analysis button.
+    """
+    try:
+        # Get latest sensor data from polling service
+        from backend.services.sensor_poller import get_sensor_poller
+        
+        poller = get_sensor_poller()
+        latest_data = poller.get_latest_data()
+        
+        if not latest_data:
+            raise HTTPException(status_code=503, detail="No sensor data available - ESP32 may be offline")
+        
+        if not poller.is_data_fresh(max_age_seconds=30):
+            raise HTTPException(status_code=503, detail="Sensor data is stale - ESP32 may be offline")
+        
+        # Calculate risk level using polled data
+        risk_level, confidence = calculate_rule_based_risk(
+            latest_data["temperature"],
+            latest_data["humidity"], 
+            latest_data["dust"]
+        )
+        
+        # Use existing reasoning functions to generate analysis
+        analysis = explain_risk(risk_level, latest_data["temperature"], latest_data["humidity"], latest_data["dust"])
+        
+        return {
+            "analysis": analysis,
+            "sensor_data": {
+                "temperature": latest_data["temperature"],
+                "humidity": latest_data["humidity"],
+                "dust": latest_data["dust"],
+                "timestamp": latest_data["server_timestamp"]
+            },
+            "risk_level": risk_level,
+            "confidence": confidence,
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error analyzing environment: {e}")
+        raise HTTPException(status_code=500, detail=f"Environment analysis failed: {str(e)}")

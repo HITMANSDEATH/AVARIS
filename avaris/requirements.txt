@@ -9,3 +9,7 @@ opencv-python
 pillow
 google-generativeai
 python-dotenv
+requests
+httpx
+joblib
+python-multipart

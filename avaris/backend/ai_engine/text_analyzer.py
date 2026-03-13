@@ -3,6 +3,25 @@ Text Analysis Module using Gemini AI
 Handles all text-based analysis, explanations, and reasoning
 """
 
+# Python 3.13 compatibility fix for cgi module
+import sys
+if sys.version_info >= (3, 13):
+    try:
+        import cgi
+    except ImportError:
+        # Create a minimal cgi module stub for Python 3.13 compatibility
+        import types
+        import html
+        
+        cgi = types.ModuleType('cgi')
+        # Provide the most commonly used cgi functions
+        cgi.escape = html.escape  # html.escape is the modern replacement
+        cgi.parse_qs = lambda qs, keep_blank_values=False, strict_parsing=False: {}
+        cgi.parse_qsl = lambda qs, keep_blank_values=False, strict_parsing=False: []
+        
+        # Add to sys.modules so other imports can find it
+        sys.modules['cgi'] = cgi
+
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
@@ -22,28 +41,19 @@ class GeminiTextAnalyzer:
     
     def _configure_gemini(self):
         """Configure Gemini API"""
-        # Try hardcoded key first (for development)
-        hardcoded_key = ""
+        api_key = os.getenv("GEMINI_API_KEY")
         
-        api_key = None
-        if hardcoded_key and hardcoded_key not in ["", "YOUR_API_KEY_HERE"]:
-            api_key = hardcoded_key
-            logger.info("Using hardcoded Gemini API key")
-        else:
-            api_key = os.getenv("GEMINI_API_KEY")
-            if api_key and api_key != "YOUR_API_KEY_HERE":
-                logger.info("Using Gemini API key from environment")
+        if not api_key or api_key.strip() == "":
+            logger.warning("GEMINI_API_KEY not found in environment variables")
+            self.model = None
+            return
         
-        if api_key:
-            try:
-                genai.configure(api_key=api_key)
-                self.model = genai.GenerativeModel('gemini-2.5-flash')
-                logger.info("Gemini text analyzer configured successfully")
-            except Exception as e:
-                logger.error(f"Failed to configure Gemini: {e}")
-                self.model = None
-        else:
-            logger.warning("Gemini API key not found")
+        try:
+            genai.configure(api_key=api_key)
+            self.model = genai.GenerativeModel('gemini-2.5-flash')
+            logger.info("Gemini text analyzer configured successfully")
+        except Exception as e:
+            logger.error(f"Failed to configure Gemini: {e}")
             self.model = None
     
     def generate_text(self, prompt: str) -> str:
@@ -58,14 +68,14 @@ class GeminiTextAnalyzer:
         """
         if not self.model:
             logger.warning("Gemini not configured, returning fallback response")
-            return "AI analysis unavailable. Please configure Gemini API key."
+            return "AI analysis unavailable. Please configure your GEMINI_API_KEY in the .env file. See GEMINI_API_SETUP.md for instructions."
         
         try:
             response = self.model.generate_content(prompt)
             return response.text.strip()
         except Exception as e:
             logger.error(f"Error generating text with Gemini: {e}")
-            return f"Error generating AI response: {str(e)}"
+            return f"Error generating AI response: {str(e)}. Please check your GEMINI_API_KEY configuration."
     
     def is_available(self) -> bool:
         """Check if Gemini is available"""

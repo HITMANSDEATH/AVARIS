@@ -36,14 +36,7 @@ class RiskPrediction(Base):
     confidence = Column(Float, nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
 
-class AnomalyEvent(Base):
-    __tablename__ = "anomaly_events"
-
-    id = Column(Integer, primary_key=True, index=True)
-    status = Column(String, nullable=False) # normal or anomaly
-    description = Column(String, nullable=True) # AI Explanation
-    recommended_action = Column(String, nullable=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+# Removed AnomalyEvent model - anomaly detection functionality disabled
 
 class CameraEvent(Base):
     __tablename__ = "camera_events"

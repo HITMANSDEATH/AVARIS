@@ -15,12 +15,15 @@ This will install:
 - ML libraries for environmental monitoring
 
 ### 2. Configure Gemini API Key
-Create or update `.env` file:
+You need to set up your Gemini API key to enable AI features:
+
+1. Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Update the `.env` file:
 ```bash
-GEMINI_API_KEY=your_api_key_here
+GEMINI_API_KEY="your_actual_api_key_here"
 ```
 
-**Note:** A hardcoded key is already configured in the code for development purposes.
+**📖 For detailed setup instructions, see [GEMINI_API_SETUP.md](GEMINI_API_SETUP.md)**
 
 ### 3. Initialize Database
 ```bash

@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     MISTRAL_MODEL_PATH: str = os.getenv("MISTRAL_MODEL_PATH", "./models/mistral_4b")
     CAMERA_STREAM_URL: str = os.getenv("CAMERA_STREAM_URL", "http://ESP32CAM_IP/stream")
     ESP32_CAM_IP: str = os.getenv("ESP32_CAM_IP", "192.168.1.100")
+    ESP32_SENSOR_IP: str = os.getenv("ESP32_SENSOR_IP", "192.168.1.40")  # New sensor ESP32 IP
+    SENSOR_POLL_INTERVAL: int = int(os.getenv("SENSOR_POLL_INTERVAL", "5"))  # Poll every 5 seconds
     FRONTEND_URL: str = "http://localhost:5173" # Default Vite port
 
     class Config:

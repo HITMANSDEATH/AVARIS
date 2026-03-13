@@ -24,28 +24,19 @@ class GeminiVisionAnalyzer:
     
     def _configure_gemini(self):
         """Configure Gemini Vision API"""
-        # Try hardcoded key first (for development)
-        hardcoded_key = ""
+        api_key = os.getenv("GEMINIV_API_KEY")
         
-        api_key = None
-        if hardcoded_key and hardcoded_key not in ["", "YOUR_API_KEY_HERE"]:
-            api_key = hardcoded_key
-            logger.info("Using hardcoded Gemini API key for vision")
-        else:
-            api_key = os.getenv("GEMINI_API_KEY")
-            if api_key and api_key != "YOUR_API_KEY_HERE":
-                logger.info("Using Gemini API key from environment for vision")
+        if not api_key or api_key.strip() == "":
+            logger.warning("GEMINIV_API_KEY not found in environment variables")
+            self.model = None
+            return
         
-        if api_key:
-            try:
-                genai.configure(api_key=api_key)
-                self.model = genai.GenerativeModel('gemini-2.5-flash')
-                logger.info("Gemini vision analyzer configured successfully")
-            except Exception as e:
-                logger.error(f"Failed to configure Gemini Vision: {e}")
-                self.model = None
-        else:
-            logger.warning("Gemini API key not found for vision analysis")
+        try:
+            genai.configure(api_key=api_key)
+            self.model = genai.GenerativeModel('gemini-2.5-flash')
+            logger.info("Gemini vision analyzer configured successfully")
+        except Exception as e:
+            logger.error(f"Failed to configure Gemini Vision: {e}")
             self.model = None
     
     def analyze_food_image(self, image_path: str) -> dict:

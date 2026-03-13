@@ -24,7 +24,6 @@ function formatMarkdown(text) {
 function App() {
   const [sensorData, setSensorData] = useState({ temperature: 0, humidity: 0, dust: 0 });
   const [riskData, setRiskData] = useState({ risk_level: 'UNKNOWN', confidence: 0 });
-  const [anomalies, setAnomalies] = useState([]);
   const [forecast, setForecast] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showCameraPanel, setShowCameraPanel] = useState(false);
@@ -32,10 +31,9 @@ function App() {
 
   const fetchData = async () => {
     try {
-      const [sensorRes, riskRes, anomalyRes, forecastRes] = await Promise.allSettled([
-        fetch(`${API_BASE}/latest-sensor-data`),
+      const [sensorRes, riskRes, forecastRes] = await Promise.allSettled([
+        fetch(`${API_BASE}/latest-sensors`),  // Updated to use new polling endpoint
         fetch(`${API_BASE}/risk-prediction`),
-        fetch(`${API_BASE}/anomaly-events?limit=5`),
         fetch(`${API_BASE}/forecast`)
       ]);
 
@@ -44,9 +42,6 @@ function App() {
       }
       if (riskRes.status === 'fulfilled' && riskRes.value.ok) {
         setRiskData(await riskRes.value.json());
-      }
-      if (anomalyRes.status === 'fulfilled' && anomalyRes.value.ok) {
-        setAnomalies(await anomalyRes.value.json());
       }
       if (forecastRes.status === 'fulfilled' && forecastRes.value.ok) {
         const data = await forecastRes.value.json();
@@ -67,10 +62,27 @@ function App() {
   }, []);
 
   const handleCameraCapture = (result) => {
+    console.log('📋 Camera capture result received:', result);
     // Update the food analysis result when camera captures
     setFoodAnalysisResult(result);
     // Close camera panel after successful capture
     setShowCameraPanel(false);
+    console.log('📷 Camera panel closed');
+    
+    // Scroll to food analysis panel after a short delay
+    setTimeout(() => {
+      console.log('🔍 Attempting to scroll to analysis panel...');
+      const analysisPanel = document.querySelector('.food-analysis-panel');
+      if (analysisPanel) {
+        console.log('✅ Found analysis panel, scrolling...');
+        analysisPanel.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        });
+      } else {
+        console.log('❌ Analysis panel not found');
+      }
+    }, 1200); // Wait for camera panel to close
   };
 
   if (loading) {
@@ -103,6 +115,9 @@ function App() {
           📷 AVARIS Cam
         </button>
       </div>
+
+      {/* Environment Analysis Panel */}
+      <EnvironmentAnalysisPanel API_BASE={API_BASE} />
 
       {/* Camera Panel */}
       {showCameraPanel && (
@@ -187,33 +202,6 @@ function App() {
             <p style={{ color: 'var(--text-muted)' }}>Insufficient data to generate forecast.</p>
           )}
         </div>
-
-        {/* Anomaly Log */}
-        <div className="card anomaly-container">
-          <div className="card-title" style={{ color: 'var(--danger)' }}>System Alerts &amp; Anomalies</div>
-          <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-            {anomalies.length > 0 ? anomalies.map((anomaly, idx) => (
-              <div key={idx} className="anomaly-item">
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                  <strong style={{ color: 'var(--danger)', textTransform: 'uppercase' }}>{anomaly.status}</strong>
-                  <small style={{ color: 'var(--text-muted)' }}>
-                    {new Date(anomaly.timestamp).toLocaleTimeString()}
-                  </small>
-                </div>
-                <p style={{ fontSize: '0.9rem', marginBottom: '0.5rem', whiteSpace: 'pre-wrap' }}>
-                  {anomaly.description}
-                </p>
-                {anomaly.action && (
-                  <div style={{ fontSize: '0.8rem', color: 'var(--warning)', marginTop: '0.5rem' }}>
-                    <strong>Action:</strong> {anomaly.action}
-                  </div>
-                )}
-              </div>
-            )) : (
-              <p style={{ color: 'var(--text-muted)' }}>No recent anomalies detected. System operating normally.</p>
-            )}
-          </div>
-        </div>
       </main>
 
       <FoodAnalysisPanel 
@@ -228,11 +216,12 @@ function App() {
 function CameraPanel({ API_BASE, onClose, onCapture }) {
   const [cameraAvailable, setCameraAvailable] = useState(true);
   const [capturing, setCapturing] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisStage, setAnalysisStage] = useState('');
   const [error, setError] = useState(null);
   const [streamLoaded, setStreamLoaded] = useState(false);
   const [streamPaused, setStreamPaused] = useState(false);
   const imgRef = useRef(null);
-  const refreshIntervalRef = useRef(null);
 
   // Direct ESP32-CAM URLs
   const ESP32_CAM_IP = '192.168.1.40';
@@ -241,7 +230,7 @@ function CameraPanel({ API_BASE, onClose, onCapture }) {
   useEffect(() => {
     // Setup keyboard listener for Enter key - only when camera panel is open
     const handleKeyPress = (event) => {
-      if (event.key === 'Enter' && !capturing && cameraAvailable && !streamPaused) {
+      if (event.key === 'Enter' && !capturing && !analyzing && cameraAvailable && streamLoaded && !streamPaused) {
         event.preventDefault();
         captureSequence();
       }
@@ -249,85 +238,92 @@ function CameraPanel({ API_BASE, onClose, onCapture }) {
 
     document.addEventListener('keydown', handleKeyPress);
     return () => document.removeEventListener('keydown', handleKeyPress);
-  }, [capturing, cameraAvailable, streamPaused]);
+  }, [capturing, analyzing, cameraAvailable, streamLoaded, streamPaused]);
 
   useEffect(() => {
-    // Optimized stream loading - start immediately and refresh periodically
+    // Load stream when component mounts
     if (imgRef.current && !streamPaused) {
-      // Set initial stream URL
       imgRef.current.src = streamUrl;
-      
-      // Start refresh interval
-      startStreamRefresh();
     }
-
-    return () => stopStreamRefresh();
-  }, [streamUrl, streamLoaded, streamPaused]);
-
-  const startStreamRefresh = () => {
-    if (refreshIntervalRef.current) {
-      clearInterval(refreshIntervalRef.current);
-    }
-    
-    refreshIntervalRef.current = setInterval(() => {
-      if (imgRef.current && streamLoaded && !streamPaused) {
-        const timestamp = new Date().getTime();
-        imgRef.current.src = `${streamUrl}?t=${timestamp}`;
-      }
-    }, 100);
-  };
-
-  const stopStreamRefresh = () => {
-    if (refreshIntervalRef.current) {
-      clearInterval(refreshIntervalRef.current);
-      refreshIntervalRef.current = null;
-    }
-  };
+  }, [streamUrl, streamPaused]);
 
   const pauseStream = () => {
-    console.log('🛑 Stopping stream display for capture...');
+    console.log('🛑 Pausing stream for capture...');
     setStreamPaused(true);
-    stopStreamRefresh();
     
-    // Actually stop displaying the stream by clearing the src
     if (imgRef.current) {
-      imgRef.current.src = '';  // Clear the stream source
-      imgRef.current.style.display = 'none';  // Hide the image element
+      // Stop the stream by clearing the src
+      imgRef.current.src = '';
     }
   };
 
   const resumeStream = () => {
-    console.log('▶️ Restarting stream display after capture...');
+    console.log('▶️ Resuming stream after capture...');
     setStreamPaused(false);
     
     if (imgRef.current) {
-      imgRef.current.style.display = 'block';  // Show the image element
-      // Force refresh with new timestamp to restart stream
+      // Restart stream with timestamp to force refresh
       const timestamp = new Date().getTime();
       imgRef.current.src = `${streamUrl}?t=${timestamp}`;
     }
-    
-    // Restart refresh interval
-    startStreamRefresh();
   };
 
   const captureSequence = async () => {
     console.log('🔥 Enter key pressed - starting capture sequence...');
     setCapturing(true);
+    setAnalyzing(false);
+    setAnalysisStage('');
     setError(null);
 
     try {
-      // 1️⃣ Pause the stream
+      // 1️⃣ Pause the stream to free up ESP32 resources
       pauseStream();
+      setAnalysisStage('Pausing stream...');
+      console.log('📊 Stage: Pausing stream...');
       
-      // Small delay to ensure stream is paused
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // 2️⃣ Wait a moment for stream to fully stop
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      // 2️⃣ Call /capture and 3️⃣ Send to AI pipeline
-      console.log('📸 Calling backend capture...');
-      const response = await fetch(`${API_BASE}/capture-food-image`, {
+      // 3️⃣ Start capture phase
+      setAnalysisStage('Capturing image...');
+      console.log('📊 Stage: Capturing image...');
+      console.log('📸 Calling backend for ESP32 capture...');
+      
+      // 4️⃣ Switch to analysis phase before making the request
+      setCapturing(false);
+      setAnalyzing(true);
+      setAnalysisStage('Processing image...');
+      console.log('📊 Stage: Processing image... (analyzing=true)');
+
+      // 5️⃣ Start the backend request
+      const responsePromise = fetch(`${API_BASE}/capture-food-image`, {
         method: 'POST',
       });
+
+      // 6️⃣ Show analysis stages while waiting for response
+      const showAnalysisStages = async () => {
+        await new Promise(resolve => setTimeout(resolve, 800));
+        setAnalysisStage('Analyzing with Gemini AI...');
+        console.log('📊 Stage: Analyzing with Gemini AI...');
+        
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        setAnalysisStage('Detecting ingredients...');
+        console.log('📊 Stage: Detecting ingredients...');
+        
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        setAnalysisStage('Checking allergens...');
+        console.log('📊 Stage: Checking allergens...');
+        
+        await new Promise(resolve => setTimeout(resolve, 800));
+        setAnalysisStage('Generating report...');
+        console.log('📊 Stage: Generating report...');
+      };
+
+      // Run both the API call and visual stages in parallel
+      const [response] = await Promise.all([
+        responsePromise,
+        showAnalysisStages()
+      ]);
 
       if (!response.ok) {
         throw new Error(await response.text());
@@ -336,18 +332,29 @@ function CameraPanel({ API_BASE, onClose, onCapture }) {
       const data = await response.json();
       console.log('✅ Capture and analysis successful:', data);
       
-      // Pass result to parent component
+      setAnalysisStage('Analysis complete!');
+      console.log('📊 Stage: Analysis complete!');
+      
+      // 7️⃣ Pass result to parent component
       onCapture(data);
+      
+      // 8️⃣ Close camera panel after successful analysis
+      setTimeout(() => {
+        console.log('🔄 Closing camera panel...');
+        onClose();
+      }, 1500);
       
     } catch (err) {
       console.error('❌ Capture sequence failed:', err);
       setError(`Capture failed: ${err.message}`);
-    } finally {
-      // 4️⃣ Resume the stream (always, even on error)
+      
+      // Resume stream on error
       setTimeout(() => {
         resumeStream();
         setCapturing(false);
-      }, 500); // Small delay before resuming
+        setAnalyzing(false);
+        setAnalysisStage('');
+      }, 1000);
     }
   };
 
@@ -365,6 +372,8 @@ function CameraPanel({ API_BASE, onClose, onCapture }) {
     setError(null);
   };
 
+  const isProcessing = capturing || analyzing;
+
   return (
     <div className="camera-panel-overlay">
       <div className="camera-panel">
@@ -376,6 +385,7 @@ function CameraPanel({ API_BASE, onClose, onCapture }) {
         <div className="camera-content">
           <div className="camera-stream-container">
             <div className="stream-wrapper">
+              {/* Live stream */}
               <img
                 ref={imgRef}
                 id="avarisCamFeed"
@@ -383,30 +393,41 @@ function CameraPanel({ API_BASE, onClose, onCapture }) {
                 width="480"
                 height="360"
                 alt="AVARIS Camera Feed"
-                className="camera-stream"
+                className={`camera-stream ${isProcessing ? 'processing' : ''}`}
                 onError={handleStreamError}
                 onLoad={handleStreamLoad}
                 style={{ 
-                  opacity: streamLoaded ? 1 : 0.5,
+                  opacity: streamLoaded && !streamPaused ? 1 : 0.5,
                   transition: 'opacity 0.3s ease',
-                  display: streamPaused ? 'none' : 'block'
+                  display: streamPaused || analyzing ? 'none' : 'block'
                 }}
               />
               
-              {/* Show placeholder when stream is paused */}
-              {streamPaused && (
+              {/* Show placeholder when stream is paused or analyzing */}
+              {(streamPaused || analyzing) && (
                 <div className="stream-placeholder">
                   <div className="placeholder-content">
-                    <div className="capture-icon">📸</div>
-                    <p>Capturing Image...</p>
-                    <div className="capture-progress">
-                      <div className="progress-bar"></div>
+                    <div className={`capture-icon ${analyzing ? 'analyzing' : ''}`}>
+                      {capturing ? '📸' : analyzing ? '🧠' : '📸'}
                     </div>
+                    <p>{analysisStage || 'Processing...'}</p>
+                    <div className="capture-progress">
+                      <div className={`progress-bar ${analyzing ? 'analyzing' : ''}`}></div>
+                    </div>
+                    {analyzing && (
+                      <div className="analysis-details">
+                        <div className="analysis-steps">
+                          <div className="step active">🔍 Image Analysis</div>
+                          <div className="step active">🥗 Ingredient Detection</div>
+                          <div className="step active">⚠️ Allergen Check</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
               
-              {!streamLoaded && !streamPaused && (
+              {!streamLoaded && !streamPaused && !analyzing && (
                 <div className="stream-loading">
                   <div className="loading-spinner">🔄</div>
                   <p>Loading camera stream...</p>
@@ -414,13 +435,13 @@ function CameraPanel({ API_BASE, onClose, onCapture }) {
               )}
               
               <div className="stream-overlay">
-                {streamPaused ? (
+                {isProcessing ? (
                   <div className="capture-in-progress">
                     <div className="capturing-indicator">
-                      📸 Capturing & Analyzing...
+                      {capturing ? '📸 Capturing...' : '🧠 Analyzing...'}
                     </div>
                     <div className="stream-status">
-                      Stream stopped
+                      {analysisStage || (capturing ? 'Stream paused' : 'Processing')}
                     </div>
                   </div>
                 ) : (
@@ -430,7 +451,11 @@ function CameraPanel({ API_BASE, onClose, onCapture }) {
                 )}
                 
                 <div className="stream-info">
-                  ESP32-CAM: {ESP32_CAM_IP} {streamPaused ? '(Stopped)' : '(Live)'}
+                  ESP32-CAM: {ESP32_CAM_IP} {
+                    capturing ? '(Capturing)' : 
+                    analyzing ? '(Analyzing)' : 
+                    streamPaused ? '(Paused)' : '(Live)'
+                  }
                 </div>
               </div>
             </div>
@@ -452,6 +477,9 @@ function CameraPanel({ API_BASE, onClose, onCapture }) {
                   setCameraAvailable(true);
                   setStreamLoaded(false);
                   setStreamPaused(false);
+                  setCapturing(false);
+                  setAnalyzing(false);
+                  setAnalysisStage('');
                   setError(null);
                   if (imgRef.current) {
                     imgRef.current.src = `${streamUrl}?t=${new Date().getTime()}`;
@@ -593,6 +621,166 @@ function FoodAnalysisPanel({ API_BASE, cameraResult, onResultUpdate }) {
                   style={{ whiteSpace: 'pre-wrap' }}
                   dangerouslySetInnerHTML={{ 
                     __html: formatMarkdown(result.ai_explanation) 
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function EnvironmentAnalysisPanel({ API_BASE }) {
+  const [analysis, setAnalysis] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleAnalyze = async () => {
+    setLoading(true);
+    setError(null);
+    setAnalysis(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/analyze-environment`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const data = await response.json();
+      setAnalysis(data);
+    } catch (err) {
+      setError(`Analysis failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <section className="card environment-analysis-panel" style={{ marginTop: '2rem' }}>
+      <div className="card-title">🌍 Environment Analysis</div>
+      
+      <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+        <button 
+          className="btn-primary"
+          onClick={handleAnalyze}
+          disabled={loading}
+          style={{
+            background: loading ? 'var(--text-muted)' : 'linear-gradient(45deg, var(--primary), #00aaff)',
+            color: 'white',
+            border: 'none',
+            padding: '1rem 2rem',
+            fontSize: '1.1rem',
+            fontWeight: 'bold',
+            borderRadius: '25px',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            transition: 'all 0.3s ease',
+            textTransform: 'uppercase',
+            letterSpacing: '1px'
+          }}
+        >
+          {loading ? '🧠 Analyzing...' : '🔍 Analyze Environment'}
+        </button>
+      </div>
+
+      {error && (
+        <div style={{ 
+          color: 'var(--danger)', 
+          background: 'rgba(255, 68, 68, 0.1)',
+          padding: '1rem',
+          borderRadius: '8px',
+          border: '1px solid var(--danger)',
+          marginBottom: '1rem'
+        }}>
+          ⚠️ {error}
+        </div>
+      )}
+
+      {analysis && (
+        <div className="environment-analysis-result">
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: '1fr 2fr', 
+            gap: '2rem',
+            alignItems: 'start'
+          }}>
+            {/* Current Readings */}
+            <div>
+              <h4 style={{ color: 'var(--primary)', marginBottom: '1rem' }}>Current Readings</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                <div style={{ 
+                  background: 'rgba(0, 255, 204, 0.1)', 
+                  padding: '0.8rem', 
+                  borderRadius: '8px',
+                  border: '1px solid rgba(0, 255, 204, 0.3)'
+                }}>
+                  <strong>Temperature:</strong> {analysis.sensor_data.temperature.toFixed(1)}°C
+                </div>
+                <div style={{ 
+                  background: 'rgba(0, 255, 204, 0.1)', 
+                  padding: '0.8rem', 
+                  borderRadius: '8px',
+                  border: '1px solid rgba(0, 255, 204, 0.3)'
+                }}>
+                  <strong>Humidity:</strong> {analysis.sensor_data.humidity.toFixed(1)}%
+                </div>
+                <div style={{ 
+                  background: 'rgba(0, 255, 204, 0.1)', 
+                  padding: '0.8rem', 
+                  borderRadius: '8px',
+                  border: '1px solid rgba(0, 255, 204, 0.3)'
+                }}>
+                  <strong>Dust Level:</strong> {analysis.sensor_data.dust.toFixed(1)}µg/m³
+                </div>
+                <div style={{ 
+                  background: analysis.risk_level === 'HIGH' || analysis.risk_level === 'CRITICAL' 
+                    ? 'rgba(255, 68, 68, 0.1)' 
+                    : analysis.risk_level === 'MEDIUM' 
+                    ? 'rgba(255, 170, 0, 0.1)' 
+                    : 'rgba(0, 204, 102, 0.1)', 
+                  padding: '0.8rem', 
+                  borderRadius: '8px',
+                  border: `1px solid ${
+                    analysis.risk_level === 'HIGH' || analysis.risk_level === 'CRITICAL' 
+                      ? 'var(--danger)' 
+                      : analysis.risk_level === 'MEDIUM' 
+                      ? 'var(--warning)' 
+                      : 'var(--success)'
+                  }`
+                }}>
+                  <strong>Risk Level:</strong> {analysis.risk_level}
+                </div>
+              </div>
+              <div style={{ 
+                fontSize: '0.8rem', 
+                color: 'var(--text-muted)', 
+                marginTop: '1rem',
+                textAlign: 'center'
+              }}>
+                Analyzed at: {new Date(analysis.generated_at).toLocaleTimeString()}
+              </div>
+            </div>
+
+            {/* AI Analysis */}
+            <div>
+              <h4 style={{ color: 'var(--primary)', marginBottom: '1rem' }}>🤖 AI Analysis</h4>
+              <div className="ai-explanation-box" style={{
+                background: 'rgba(0, 0, 0, 0.3)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '12px',
+                padding: '1.5rem',
+                fontSize: '1rem',
+                lineHeight: '1.6',
+                minHeight: '200px'
+              }}>
+                <div 
+                  style={{ whiteSpace: 'pre-wrap' }}
+                  dangerouslySetInnerHTML={{ 
+                    __html: formatMarkdown(analysis.analysis) 
                   }}
                 />
               </div>

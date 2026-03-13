@@ -77,11 +77,7 @@
 }
 
 .forecast-container {
-  grid-column: span 8;
-}
-
-.anomaly-container {
-  grid-column: span 4;
+  grid-column: span 12;
 }
 
 /* Sensor specific */
@@ -142,18 +138,6 @@
   color: var(--danger);
   border: 1px solid var(--danger);
   animation: pulse 1.5s infinite;
-}
-
-/* Anomaly List */
-.anomaly-item {
-  padding: 1rem;
-  background: rgba(255,255,255,0.02);
-  border-left: 4px solid var(--danger);
-  border-radius: 4px;
-  margin-bottom: 1rem;
-}
-.anomaly-item:last-child {
-  margin-bottom: 0;
 }
 
 /* Forecast Table */
@@ -299,6 +283,13 @@
   display: block;
   border-radius: 12px;
   object-fit: cover;
+  transition: all 0.3s ease;
+}
+
+.camera-stream.capturing {
+  border: 2px solid var(--primary);
+  box-shadow: 0 0 20px rgba(0, 255, 204, 0.3);
+  filter: brightness(1.1) contrast(1.05);
 }
 
 .stream-placeholder {
@@ -324,6 +315,97 @@
   font-size: 3rem;
   margin-bottom: 1rem;
   animation: pulse 1.5s infinite;
+}
+
+.capture-icon.analyzing {
+  animation: brain-pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { 
+    transform: scale(1);
+  }
+  50% { 
+    transform: scale(1.05);
+  }
+}
+
+@keyframes brain-pulse {
+  0%, 100% { 
+    transform: scale(1);
+  }
+  50% { 
+    transform: scale(1.1);
+  }
+}
+
+.placeholder-content p {
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin: 0 0 1rem 0;
+}
+
+.capture-progress {
+  width: 200px;
+  height: 4px;
+  background: rgba(0, 255, 204, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 100%;
+  background: var(--primary);
+  border-radius: 2px;
+  animation: progress 2s ease-in-out infinite;
+}
+
+.progress-bar.analyzing {
+  background: linear-gradient(90deg, 
+    var(--primary) 0%, 
+    #00aaff 50%, 
+    var(--primary) 100%);
+  background-size: 200% 100%;
+  animation: rainbow-flow 3s linear infinite;
+}
+
+@keyframes rainbow-flow {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.analysis-details {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(0, 255, 204, 0.3);
+}
+
+.analysis-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.step {
+  padding: 0.3rem 0.8rem;
+  border-radius: 15px;
+  background: rgba(0, 255, 204, 0.1);
+  border: 1px solid rgba(0, 255, 204, 0.3);
+  font-size: 0.9rem;
+  color: var(--primary);
+  transition: all 0.3s ease;
+}
+
+.step.active {
+  background: rgba(0, 255, 204, 0.2);
+  border-color: var(--primary);
+}
+
+.camera-stream.processing {
+  border: 2px solid var(--primary);
 }
 
 .placeholder-content p {
@@ -580,5 +662,39 @@
   
   .captured-image img {
     max-width: 200px;
+  }
+}
+
+/* Environment Analysis Panel */
+.environment-analysis-panel {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.08);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+
+.environment-analysis-panel:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0,255,204,0.05), 0 6px 6px rgba(0,0,0,0.1);
+  border-color: rgba(0,255,204,0.2);
+}
+
+.environment-analysis-result {
+  animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsive for Environment Analysis */
+@media (max-width: 768px) {
+  .environment-analysis-result > div {
+    grid-template-columns: 1fr !important;
+    gap: 1.5rem;
   }
 }

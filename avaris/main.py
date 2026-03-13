@@ -1,3 +1,41 @@
+# Python 3.13 compatibility fix for cgi module
+import sys
+if sys.version_info >= (3, 13):
+    try:
+        import cgi
+    except ImportError:
+        # Create a minimal cgi module stub for Python 3.13 compatibility
+        import types
+        import html
+        import email.message
+        
+        cgi = types.ModuleType('cgi')
+        # Provide the most commonly used cgi functions
+        cgi.escape = html.escape  # html.escape is the modern replacement
+        cgi.parse_qs = lambda qs, keep_blank_values=False, strict_parsing=False: {}
+        cgi.parse_qsl = lambda qs, keep_blank_values=False, strict_parsing=False: []
+        
+        # Add parse_header function that httpx needs
+        def parse_header(line):
+            """Parse a Content-type like header."""
+            parts = line.split(';')
+            main_type = parts[0].strip()
+            pdict = {}
+            for p in parts[1:]:
+                if '=' in p:
+                    name, value = p.split('=', 1)
+                    name = name.strip().lower()
+                    value = value.strip()
+                    if value.startswith('"') and value.endswith('"'):
+                        value = value[1:-1]
+                    pdict[name] = value
+            return main_type, pdict
+        
+        cgi.parse_header = parse_header
+        
+        # Add to sys.modules so other imports can find it
+        sys.modules['cgi'] = cgi
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -50,11 +88,26 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to initialize allergen checker: {e}")
     
+    # Start ESP32 sensor polling service
+    logger.info("Starting ESP32 sensor polling service...")
+    try:
+        from backend.services.sensor_poller import start_sensor_polling
+        await start_sensor_polling()
+        logger.info("ESP32 sensor polling service started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start sensor polling service: {e}")
+    
     logger.info("AVARIS Backend startup complete")
     yield
     
     # Shutdown logic
     logger.info("Shutting down AVARIS Backend...")
+    try:
+        from backend.services.sensor_poller import stop_sensor_polling
+        await stop_sensor_polling()
+        logger.info("Sensor polling service stopped")
+    except Exception as e:
+        logger.error(f"Error stopping sensor polling service: {e}")
 
 app = FastAPI(title="AVARIS Environmental Monitor API", lifespan=lifespan)
 
